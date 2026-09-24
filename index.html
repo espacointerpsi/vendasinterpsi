@@ -156,7 +156,7 @@
       <div id="v-leitor"></div>
       <div id="v-leitor-status">Aponte para o código de barras</div>
     </div>
-    <p class="dica">Com a leitora, é só bipar. Para buscar pelo nome, marca ou sabor, digite e aperte Enter.</p>
+    <p class="dica">Bipe o produto ou digite o código de barras e aperte Enter. Produtos sem código ficam nos botões abaixo.</p>
     <div id="v-rapidos-box" hidden>
       <h2 style="font-size:18px; margin-bottom:0">Sem código de barras</h2>
       <div class="rapidos" id="v-rapidos"></div>
@@ -199,7 +199,9 @@
       <input type="text" id="p-busca" placeholder="Buscar por nome ou código" autocomplete="off">
       <button class="btn" onclick="lerCamera(c => { el('p-busca').value = c; listarProdutos(); })">📷</button>
     </div>
+    <div class="formas" id="p-filtros" style="margin:12px 0"></div>
     <div style="margin:12px 0"><button class="btn principal" onclick="abrirProduto()">Cadastrar produto</button></div>
+    <p class="dica" id="p-contagem" style="margin-bottom:6px"></p>
     <div class="lista" id="p-lista"></div>
   </section>
 
@@ -209,6 +211,10 @@
       <div class="num"><b id="f-total">R$ 0,00</b><span>a receber no total</span></div>
       <div class="num"><b id="f-qtd">0</b><span>clientes devendo</span></div>
     </div>
+    <div class="campo" style="margin-top:12px">
+      <input type="text" id="f-busca" placeholder="Buscar cliente" autocomplete="off">
+    </div>
+    <div class="formas" id="f-filtros" style="margin:12px 0"></div>
     <div style="margin:12px 0"><button class="btn principal" onclick="abrirNovoCliente(false)">Cadastrar cliente</button></div>
     <div class="lista" id="f-lista"></div>
   </section>
@@ -347,11 +353,8 @@ function adicionar(codigo) {
   if (!codigo) return;
   let p = produto(codigo);
   if (!p) {
-    // tenta pelo nome
-    const achados = DB.produtos.filter(x => busca(x).includes(codigo.toLowerCase()));
-    if (achados.length === 1) p = achados[0];
-    else if (achados.length > 1) return escolherProduto(achados);
-    else if (/^\d{4,}$/.test(codigo)) {
+    // Só aceita código (bipado ou digitado). Nome não vende: evita pegar o produto errado.
+    if (/^\d{4,}$/.test(codigo)) {
       // Pode ter sido cadastrado em outro computador: busca a lista atualizada antes
       return api('getDados').then(d => {
         aplicar(d);
@@ -359,7 +362,7 @@ function adicionar(codigo) {
         else abrirProduto({ codigo, novo: true }, true);
       }).catch(falha);
     }
-    else return aviso('Nenhum produto encontrado com "' + codigo + '"', true);
+    return aviso('Código "' + codigo + '" não encontrado. Bipe o produto ou digite o código de barras.', true);
   }
   const it = carrinho.find(i => i.codigo === p.codigo);
   if ((it ? it.qtd : 0) + 1 > p.estoque) return aviso('Só tem ' + p.estoque + ' de ' + nomeDe(p) + ' no estoque', true);
@@ -630,13 +633,23 @@ function janela(html) { el('janela-conteudo').innerHTML = html; el('janela').sho
 function fecharJanela() { el('janela').close(); }
 
 /* ---------- PRODUTOS ---------- */
+let filtroProd = 'Todos', filtroCli = 'Todos';
 const lucroUn = p => p.custo > 0 ? p.preco - p.custo : null;
 const margemTxt = p => p.custo > 0 && p.preco > 0 ? Math.round((p.preco - p.custo) / p.preco * 100) + '%' : '';
 
 function listarProdutos() {
   const q = el('p-busca').value.trim().toLowerCase();
-  const lista = DB.produtos.filter(p => !q || busca(p).includes(q))
-    .sort((a, b) => nomeDe(a).localeCompare(nomeDe(b)));
+  const filtros = {
+    'Todos': () => true,
+    'Estoque baixo': p => p.estoque <= p.minimo,
+    'Sem custo': p => !(p.custo > 0),
+    'Sem código': semCodigo
+  };
+  el('p-filtros').innerHTML = Object.keys(filtros).map(f =>
+    `<button class="${f === filtroProd ? 'ativo' : ''}" onclick="filtroProd='${f}'; listarProdutos()">${f} (${DB.produtos.filter(filtros[f]).length})</button>`).join('');
+  const lista = DB.produtos.filter(p => (!q || busca(p).includes(q)) && filtros[filtroProd](p))
+    .sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), 'pt', { sensitivity: 'base' }));
+  el('p-contagem').textContent = lista.length + (lista.length === 1 ? ' produto' : ' produtos') + ', em ordem alfabética';
   el('p-lista').innerHTML = lista.length ? lista.map(p => `
     <div class="item clicavel" onclick="abrirProduto(produto('${esc(p.codigo)}'))">
       <div class="info"><div class="nome">${esc(nomeDe(p))}</div>
@@ -740,13 +753,19 @@ function listarClientes() {
   const devendo = DB.clientes.filter(c => c.saldo > 0.009);
   el('f-total').textContent = brl(devendo.reduce((s, c) => s + c.saldo, 0));
   el('f-qtd').textContent = devendo.length;
-  const lista = [...DB.clientes].sort((a, b) => b.saldo - a.saldo);
+  const q = el('f-busca').value.trim().toLowerCase();
+  const filtros = { 'Todos': () => true, 'Devendo': c => c.saldo > 0.009, 'Em dia': c => c.saldo <= 0.009 };
+  el('f-filtros').innerHTML = Object.keys(filtros).map(f =>
+    `<button class="${f === filtroCli ? 'ativo' : ''}" onclick="filtroCli='${f}'; listarClientes()">${f} (${DB.clientes.filter(filtros[f]).length})</button>`).join('');
+  const lista = DB.clientes.filter(c => (!q || c.nome.toLowerCase().includes(q)) && filtros[filtroCli](c))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt', { sensitivity: 'base' }));
   el('f-lista').innerHTML = lista.length ? lista.map(c => `
     <div class="item clicavel" onclick="abrirCliente(DB.clientes[${DB.clientes.indexOf(c)}].nome)">
       <div class="info"><div class="nome">${esc(c.nome)}</div><div class="sub">${esc(c.telefone) || 'sem telefone'}</div></div>
       <div class="preco ${c.saldo > 0.009 ? 'negativo' : ''}">${c.saldo > 0.009 ? brl(c.saldo) : 'em dia'}</div></div>`).join('')
-    : '<div class="vazio">Cadastre um cliente para poder vender fiado.</div>';
+    : `<div class="vazio">${DB.clientes.length ? 'Nenhum cliente encontrado.' : 'Cadastre um cliente para poder vender fiado.'}</div>`;
 }
+el('f-busca').oninput = listarClientes;
 
 function abrirNovoCliente(daVenda) {
   janela(`<h3>Cadastrar cliente</h3>
@@ -781,7 +800,8 @@ async function abrirCliente(nome) {
     <h2 style="font-size:18px">Movimentações</h2>
     <div class="lista" style="max-height:260px;overflow:auto">${ext.length ? ext.map(m => `
       <div class="item"><div class="info"><div class="nome">${esc(m.tipo)}${m.forma ? ' (' + esc(m.forma) + ')' : ''}</div>
-      <div class="sub">${esc(m.data)}${m.obs ? ' · ' + esc(m.obs) : ''}</div></div>
+      <div class="sub">${esc(m.data)}${m.obs ? ' · ' + esc(m.obs) : ''}</div>
+      ${m.itens ? `<div class="sub" style="color:var(--tinta)">${esc(m.itens)}</div>` : ''}</div>
       <div class="preco ${m.tipo === 'Compra' ? 'negativo' : ''}">${m.tipo === 'Compra' ? '' : '−'}${brl(m.valor)}</div></div>`).join('')
       : '<div class="vazio">Nenhuma movimentação ainda.</div>'}</div>
     <div class="acoes"><button class="btn" onclick="fecharJanela()">Fechar</button></div>`);
