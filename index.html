@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root {
+    --fundo: #EEF2F1;
+    --papel: #FFFFFF;
+    --tinta: #18302C;
+    --suave: #5E726E;
+    --linha: #D5DEDB;
+    --verde: #1D7A57;
+    --verde-escuro: #135A40;
+    --amarelo: #F2C14E;
+    --alerta: #B9461A;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--fundo); color: var(--tinta);
+    font: 16px/1.45 'Barlow', system-ui, sans-serif; }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--amarelo); outline-offset: 2px; }
+
+  header { position: sticky; top: 0; z-index: 5; background: var(--tinta); color: #fff; }
+  .topo { display: flex; align-items: baseline; justify-content: space-between;
+    max-width: 760px; margin: 0 auto; padding: 12px 16px 4px; }
+  .marca { font: 700 26px/1 'Barlow Condensed', sans-serif; letter-spacing: .5px; }
+  .status { font-size: 13px; opacity: .7; }
+  nav { display: flex; max-width: 760px; margin: 0 auto; padding: 0 8px; gap: 2px; }
+  nav button { flex: 1; background: none; border: 0; color: #fff; opacity: .65;
+    padding: 10px 4px 12px; border-bottom: 3px solid transparent; font-weight: 600; }
+  nav button.ativo { opacity: 1; border-color: var(--amarelo); }
+
+  main { max-width: 760px; margin: 0 auto; padding: 16px 16px 120px; }
+  .tela { display: none; }
+  .tela.ativa { display: block; }
+  h2 { font: 700 22px/1.2 'Barlow Condensed', sans-serif; margin: 20px 0 10px; }
+  .dica { color: var(--suave); font-size: 14px; margin: 4px 0 0; }
+
+  .campo { display: flex; gap: 8px; }
+  input[type=text], input[type=number], input[type=tel], input[type=date], select {
+    width: 100%; padding: 12px; border: 1.5px solid var(--linha); border-radius: 8px; background: var(--papel); }
+  input:focus, select:focus { border-color: var(--verde); outline: none; }
+  label { display: block; font-size: 14px; font-weight: 600; margin: 12px 0 4px; }
+
+  .btn { border: 0; border-radius: 8px; padding: 12px 16px; font-weight: 600;
+    background: var(--papel); border: 1.5px solid var(--linha); white-space: nowrap; }
+  .btn.principal { background: var(--verde); border-color: var(--verde); color: #fff; }
+  .btn.principal:active { background: var(--verde-escuro); }
+  .btn.perigo { color: var(--alerta); }
+  .btn.grande { width: 100%; padding: 16px; font-size: 18px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  /* Visor do caixa: o elemento marcante da tela */
+  .visor { background: var(--tinta); color: var(--amarelo); border-radius: 10px;
+    padding: 14px 18px; margin: 16px 0; display: flex; justify-content: space-between; align-items: end; }
+  .visor small { color: #fff; opacity: .7; font-size: 14px; }
+  .visor .valor { font: 700 46px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; }
+
+  .lista { background: var(--papel); border-radius: 10px; border: 1px solid var(--linha); }
+  .item { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--linha); }
+  .item:first-child { border-top: 0; }
+  .item .info { flex: 1; min-width: 0; }
+  .item .nome { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .sub { color: var(--suave); font-size: 14px; }
+  .item .preco { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .item.clicavel { cursor: pointer; }
+  .vazio { padding: 22px 14px; color: var(--suave); text-align: center; }
+  .qtd { display: flex; align-items: center; gap: 4px; }
+  .qtd button { width: 34px; height: 34px; border-radius: 8px; border: 1.5px solid var(--linha); background: var(--papel); font-weight: 700; }
+  .qtd span { min-width: 26px; text-align: center; font-weight: 600; }
+  .baixo { color: var(--alerta); font-weight: 600; }
+  .negativo { color: var(--alerta); }
+
+  .formas { display: flex; flex-wrap: wrap; gap: 8px; }
+  .formas button { padding: 10px 14px; border-radius: 999px; border: 1.5px solid var(--linha); background: var(--papel); font-weight: 600; }
+  .formas button.ativo { background: var(--tinta); color: #fff; border-color: var(--tinta); }
+
+  .grade { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .num { background: var(--papel); border: 1px solid var(--linha); border-radius: 10px; padding: 12px 14px; }
+  .num b { display: block; font: 700 28px/1.1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; }
+  .num span { color: var(--suave); font-size: 14px; }
+  .atalhos { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .atalhos .btn { padding: 8px 12px; }
+  .cancelada .nome, .cancelada .preco { text-decoration: line-through; opacity: .55; }
+
+  /* Câmera */
+  #camera { position: fixed; inset: 0; background: #000; z-index: 20; display: none; flex-direction: column; }
+  #camera.aberta { display: flex; }
+  #leitor { flex: 1; width: 100%; min-height: 0; overflow: hidden; }
+  #camera.sem-live #leitor { display: none; }
+  #camera.sem-live { justify-content: center; background: var(--tinta); }
+  #camera.sem-live #camera-msg { font-size: 18px; padding: 24px; max-width: 460px; margin: 0 auto; }
+  #camera.sem-live .camera-rodape { flex-direction: column; max-width: 460px; width: 100%; margin: 0 auto; }
+  #leitor video { object-fit: cover; }
+  .camera-rodape { padding: 14px; display: flex; gap: 8px; background: var(--tinta); }
+  .camera-rodape .btn { flex: 1; }
+  #camera-msg { color: #fff; text-align: center; padding: 10px; min-height: 44px; }
+
+  /* Janelas */
+  dialog { border: 0; border-radius: 12px; padding: 0; width: min(520px, 94vw); max-height: 90vh; }
+  dialog::backdrop { background: rgba(24, 48, 44, .55); }
+  .janela { padding: 18px; }
+  .janela h3 { font: 700 22px/1.2 'Barlow Condensed', sans-serif; margin: 0 0 4px; }
+  .janela .acoes { display: flex; gap: 8px; margin-top: 18px; }
+  .janela .acoes .btn { flex: 1; }
+
+  #aviso { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%) translateY(30px);
+    background: var(--tinta); color: #fff; padding: 12px 18px; border-radius: 10px; opacity: 0;
+    transition: .25s; z-index: 30; max-width: 92vw; pointer-events: none; }
+  #aviso.visivel { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #aviso.erro { background: var(--alerta); }
+  @media (prefers-reduced-motion: reduce) { #aviso { transition: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="topo"><span class="marca">Vendinha</span><span class="status" id="status">carregando…</span></div>
+  <nav>
+    <button class="ativo" data-tela="vender">Vender</button>
+    <button data-tela="produtos">Produtos</button>
+    <button data-tela="fiado">Fiado</button>
+    <button data-tela="relatorio">Relatório</button>
+  </nav>
+</header>
+
+<main>
+  <!-- VENDER -->
+  <section class="tela ativa" id="t-vender">
+    <div class="campo">
+      <input type="text" id="v-codigo" placeholder="Bipe ou digite o código" autocomplete="off" autofocus>
+      <button class="btn" id="v-camera" aria-label="Ler com a câmera">📷 Câmera</button>
+    </div>
+    <p class="dica">Com a leitora, é só bipar. Para buscar pelo nome, digite e aperte Enter.</p>
+
+    <div class="visor"><small id="v-itens">Nenhum item</small><span class="valor" id="v-total">R$ 0,00</span></div>
+
+    <div class="lista" id="v-carrinho"></div>
+
+    <h2>Pagamento</h2>
+    <div class="formas" id="v-formas"></div>
+    <div id="v-extra-fiado" hidden>
+      <label for="v-cliente">Cliente</label>
+      <div class="campo">
+        <select id="v-cliente"></select>
+        <button class="btn" onclick="abrirNovoCliente(true)">Novo</button>
+      </div>
+    </div>
+    <div id="v-extra-dinheiro" hidden>
+      <label for="v-recebido">Valor recebido</label>
+      <input type="number" id="v-recebido" inputmode="decimal" step="0.01" placeholder="0,00">
+      <p class="dica" id="v-troco"></p>
+    </div>
+
+    <div style="margin-top:20px; display:flex; gap:8px">
+      <button class="btn perigo" id="v-limpar">Limpar</button>
+      <button class="btn principal grande" id="v-finalizar">Finalizar venda</button>
+    </div>
+  </section>
+
+  <!-- PRODUTOS -->
+  <section class="tela" id="t-produtos">
+    <div class="campo">
+      <input type="text" id="p-busca" placeholder="Buscar por nome ou código" autocomplete="off">
+      <button class="btn" onclick="lerCamera(c => { el('p-busca').value = c; listarProdutos(); })">📷</button>
+    </div>
+    <div style="margin:12px 0"><button class="btn principal" onclick="abrirProduto()">Cadastrar produto</button></div>
+    <div class="lista" id="p-lista"></div>
+  </section>
+
+  <!-- FIADO -->
+  <section class="tela" id="t-fiado">
+    <div class="grade">
+      <div class="num"><b id="f-total">R$ 0,00</b><span>a receber no total</span></div>
+      <div class="num"><b id="f-qtd">0</b><span>clientes devendo</span></div>
+    </div>
+    <div style="margin:12px 0"><button class="btn principal" onclick="abrirNovoCliente(false)">Cadastrar cliente</button></div>
+    <div class="lista" id="f-lista"></div>
+  </section>
+
+  <!-- RELATÓRIO -->
+  <section class="tela" id="t-relatorio">
+    <div class="grade">
+      <div><label for="r-ini">De</label><input type="date" id="r-ini"></div>
+      <div><label for="r-fim">Até</label><input type="date" id="r-fim"></div>
+    </div>
+    <div class="atalhos">
+      <button class="btn" onclick="periodo(0)">Hoje</button>
+      <button class="btn" onclick="periodo(6)">7 dias</button>
+      <button class="btn" onclick="periodo('mes')">Este mês</button>
+      <button class="btn principal" onclick="carregarRelatorio()">Ver relatório</button>
+    </div>
+    <div id="r-saida"></div>
+  </section>
+</main>
+
+<!-- Câmera -->
+<div id="camera">
+  <div id="camera-msg">Aponte para o código de barras</div>
+  <div id="leitor"></div>
+  <div id="leitor-foto" style="display:none"></div>
+  <div class="camera-rodape">
+    <label class="btn" style="margin:0;text-align:center">📸 Tirar foto do código
+      <input type="file" accept="image/*" capture="environment" id="camera-foto" hidden>
+    </label>
+    <button class="btn principal" onclick="fecharCamera()">Fechar</button>
+  </div>
+</div>
+
+<dialog id="janela"><div class="janela" id="janela-conteudo"></div></dialog>
+<div id="aviso" role="status"></div>
+
+<script>
+/* ---------- utilidades ---------- */
+const el = id => document.getElementById(id);
+const brl = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const num = v => { const n = Number(String(v).replace(',', '.')); return isNaN(n) ? 0 : n; };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const hojeISO = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+
+/* Se a tela estiver hospedada fora do Google (para a câmera ao vivo funcionar),
+   cole aqui o link da implantação do Apps Script (termina em /exec). */
+const API_URL = 'https://script.google.com/macros/s/AKfycbwaCQQH667N6EZlSHf1cJpL-K119qkx3xRCdX_5PdBC6Wi_eh3QIoZkDHfEOcsQSrZslg/exec';
+
+let pinMemoria = '';
+function pegarPin(pedir) {
+  let pin = pinMemoria;
+  try { pin = pin || localStorage.getItem('vendinha-pin') || ''; } catch (e) {}
+  if (!pin || pedir) {
+    pin = (prompt(pedir ? 'PIN incorreto. Digite o PIN da vendinha:' : 'Digite o PIN da vendinha:') || '').trim();
+    pinMemoria = pin;
+    try { localStorage.setItem('vendinha-pin', pin); } catch (e) {}
+  }
+  return pin;
+}
+
+function chamarServidor(pin, fn, args) {
+  if (window.google && google.script && google.script.run) {
+    return new Promise((ok, erro) =>
+      google.script.run.withSuccessHandler(ok).withFailureHandler(erro).chamar(pin, fn, args));
+  }
+  if (!API_URL) return Promise.reject(new Error('Configure o API_URL no arquivo index.html.'));
+  return fetch(API_URL, { method: 'POST', body: JSON.stringify({ pin, fn, args }) })
+    .then(r => r.json())
+    .then(j => { if (!j.ok) throw new Error(j.erro); return j.data; });
+}
+
+async function api(fn, ...args) {
+  let pin = pegarPin(false);
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    try { return await chamarServidor(pin, fn, args); }
+    catch (e) {
+      if (!String(e.message || e).includes('PIN_INVALIDO')) throw e;
+      pin = pegarPin(true);
+    }
+  }
+  throw new Error('PIN incorreto.');
+}
+
+let avisoTimer;
+function aviso(msg, erro) {
+  const a = el('aviso');
+  a.textContent = msg; a.className = 'visivel' + (erro ? ' erro' : '');
+  clearTimeout(avisoTimer); avisoTimer = setTimeout(() => a.className = '', erro ? 4500 : 2200);
+}
+const falha = e => aviso(e.message || String(e), true);
+
+function bip() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = 1400; g.gain.value = 0.08;
+    o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.09);
+  } catch (e) {}
+  if (navigator.vibrate) navigator.vibrate(50);
+}
+
+/* ---------- estado ---------- */
+let DB = { produtos: [], clientes: [], formas: [] };
+let carrinho = [];            // [{codigo, qtd}]
+let forma = '';
+
+function aplicar(d) {
+  DB = d;
+  el('status').textContent = DB.produtos.length + ' produtos';
+  desenharCarrinho(); listarProdutos(); listarClientes(); preencherClientes();
+}
+const produto = c => DB.produtos.find(p => p.codigo === String(c).trim());
+
+/* ---------- abas ---------- */
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('ativo', x === b));
+  document.querySelectorAll('.tela').forEach(t => t.classList.toggle('ativa', t.id === 't-' + b.dataset.tela));
+  if (b.dataset.tela === 'vender') el('v-codigo').focus();
+  if (b.dataset.tela === 'relatorio' && !el('r-saida').innerHTML) { periodo(0); }
+});
+
+/* ---------- VENDER ---------- */
+function adicionar(codigo) {
+  codigo = String(codigo).trim();
+  if (!codigo) return;
+  let p = produto(codigo);
+  if (!p) {
+    // tenta pelo nome
+    const achados = DB.produtos.filter(x => x.nome.toLowerCase().includes(codigo.toLowerCase()));
+    if (achados.length === 1) p = achados[0];
+    else if (achados.length > 1) return escolherProduto(achados);
+    else if (/^\d{4,}$/.test(codigo)) {
+      // Pode ter sido cadastrado em outro computador: busca a lista atualizada antes
+      return api('getDados').then(d => {
+        aplicar(d);
+        if (produto(codigo)) adicionar(codigo);
+        else abrirProduto({ codigo, novo: true }, true);
+      }).catch(falha);
+    }
+    else return aviso('Nenhum produto encontrado com "' + codigo + '"', true);
+  }
+  const it = carrinho.find(i => i.codigo === p.codigo);
+  if (it) it.qtd++; else carrinho.push({ codigo: p.codigo, qtd: 1 });
+  bip();
+  if (p.estoque - (it ? it.qtd : 1) < 0) aviso('Atenção: estoque de ' + p.nome + ' está zerado na planilha', true);
+  desenharCarrinho();
+}
+
+function escolherProduto(lista) {
+  janela(`<h3>Qual produto?</h3><div class="lista" style="margin-top:12px">${lista.map(p =>
+    `<div class="item clicavel" onclick="fecharJanela(); adicionar('${esc(p.codigo)}')">
+      <div class="info"><div class="nome">${esc(p.nome)}</div><div class="sub">${esc(p.codigo)}</div></div>
+      <div class="preco">${brl(p.preco)}</div></div>`).join('')}</div>
+    <div class="acoes"><button class="btn" onclick="fecharJanela()">Voltar</button></div>`);
+}
+
+function mudarQtd(codigo, delta) {
+  const it = carrinho.find(i => i.codigo === codigo);
+  if (!it) return;
+  it.qtd += delta;
+  if (it.qtd <= 0) carrinho = carrinho.filter(i => i !== it);
+  desenharCarrinho();
+}
+
+function totalCarrinho() {
+  return carrinho.reduce((s, i) => s + (produto(i.codigo)?.preco || 0) * i.qtd, 0);
+}
+
+function desenharCarrinho() {
+  const qtd = carrinho.reduce((s, i) => s + i.qtd, 0);
+  el('v-itens').textContent = qtd ? qtd + (qtd > 1 ? ' itens' : ' item') : 'Nenhum item';
+  el('v-total').textContent = brl(totalCarrinho());
+  el('v-carrinho').innerHTML = carrinho.length ? carrinho.map(i => {
+    const p = produto(i.codigo) || { nome: i.codigo, preco: 0 };
+    return `<div class="item"><div class="info"><div class="nome">${esc(p.nome)}</div>
+      <div class="sub">${brl(p.preco)} cada</div></div>
+      <div class="qtd"><button onclick="mudarQtd('${esc(i.codigo)}',-1)" aria-label="Menos">−</button>
+      <span>${i.qtd}</span><button onclick="mudarQtd('${esc(i.codigo)}',1)" aria-label="Mais">+</button></div>
+      <div class="preco">${brl(p.preco * i.qtd)}</div></div>`;
+  }).join('') : '<div class="vazio">Bipe um produto para começar a venda.</div>';
+  calcularTroco();
+}
+
+function desenharFormas() {
+  el('v-formas').innerHTML = DB.formas.map(f =>
+    `<button class="${f === forma ? 'ativo' : ''}" onclick="escolherForma('${f}')">${f}</button>`).join('');
+  el('v-extra-fiado').hidden = forma !== 'Fiado';
+  el('v-extra-dinheiro').hidden = forma !== 'Dinheiro';
+}
+function escolherForma(f) { forma = f; desenharFormas(); calcularTroco(); }
+
+function calcularTroco() {
+  const rec = num(el('v-recebido').value), t = totalCarrinho();
+  el('v-troco').textContent = rec ? (rec >= t ? 'Troco: ' + brl(rec - t) : 'Faltam ' + brl(t - rec)) : '';
+}
+
+function preencherClientes() {
+  const atual = el('v-cliente').value;
+  el('v-cliente').innerHTML = '<option value="">Escolha…</option>' +
+    DB.clientes.map(c => `<option ${c.nome === atual ? 'selected' : ''}>${esc(c.nome)}</option>`).join('');
+}
+
+function limparVenda() {
+  carrinho = []; forma = ''; el('v-recebido').value = ''; el('v-cliente').value = '';
+  desenharFormas(); desenharCarrinho(); el('v-codigo').focus();
+}
+
+async function finalizar() {
+  if (!carrinho.length) return aviso('A venda está vazia', true);
+  if (!forma) return aviso('Escolha a forma de pagamento', true);
+  const cliente = el('v-cliente').value;
+  if (forma === 'Fiado' && !cliente) return aviso('Escolha o cliente do fiado', true);
+  const b = el('v-finalizar'); b.disabled = true; b.textContent = 'Salvando…';
+  try {
+    const r = await api('finalizarVenda', { itens: carrinho, forma, cliente });
+    aplicar(r.dados); limparVenda();
+    aviso('Venda registrada: ' + brl(r.total));
+    if (r.avisos.length) setTimeout(() => aviso('Estoque baixo: ' + r.avisos.join('; '), true), 2300);
+  } catch (e) { falha(e); }
+  b.disabled = false; b.textContent = 'Finalizar venda';
+}
+
+el('v-codigo').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); adicionar(e.target.value); e.target.value = ''; }
+});
+el('v-camera').onclick = () => lerCamera(adicionar, true);
+el('v-recebido').oninput = calcularTroco;
+el('v-limpar').onclick = () => { if (!carrinho.length || confirm('Limpar a venda atual?')) limparVenda(); };
+el('v-finalizar').onclick = finalizar;
+
+/* ---------- CÂMERA ---------- */
+let leitor = null, aoLer = null, continuo = false, ultimo = { c: '', t: 0 };
+const FORMATOS = typeof Html5QrcodeSupportedFormats !== 'undefined' ? [
+  Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+  Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
+  Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+  Html5QrcodeSupportedFormats.QR_CODE] : undefined;
+
+async function lerCamera(callback, emSequencia) {
+  if (typeof Html5Qrcode === 'undefined') return aviso('Não foi possível carregar o leitor da câmera. Verifique a internet.', true);
+  aoLer = callback; continuo = !!emSequencia;
+  el('camera').classList.add('aberta');
+  el('camera-msg').textContent = continuo ? 'Aponte para os produtos, um de cada vez' : 'Aponte para o código de barras';
+  leitor = new Html5Qrcode('leitor', { formatsToSupport: FORMATOS, verbose: false });
+  try {
+    await leitor.start({ facingMode: 'environment' },
+      { fps: 12, qrbox: (w, h) => ({ width: Math.min(w * 0.85, 360), height: Math.min(h * 0.35, 160) }) },
+      lido, () => {});
+  } catch (e) {
+    try { leitor.clear(); } catch (x) {}
+    leitor = null;
+    el('camera').classList.add('sem-live');
+    el('camera-msg').textContent = 'A câmera ao vivo não está disponível aqui. Tire uma foto do código de barras e o sistema lê da imagem.';
+  }
+}
+
+function lido(codigo) {
+  const agora = Date.now();
+  if (codigo === ultimo.c && agora - ultimo.t < 1800) return; // evita ler o mesmo 2x seguidas
+  ultimo = { c: codigo, t: agora };
+  if (continuo) {
+    el('camera-msg').textContent = '✓ ' + (produto(codigo)?.nome || codigo);
+    if (!produto(codigo)) { fecharCamera(); }
+    aoLer(codigo);
+  } else { fecharCamera(); aoLer(codigo); }
+}
+
+async function fecharCamera() {
+  el('camera').classList.remove('aberta', 'sem-live');
+  if (leitor) { try { if (leitor.isScanning) await leitor.stop(); leitor.clear(); } catch (e) {} leitor = null; }
+}
+
+el('camera-foto').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    if (leitor && leitor.isScanning) await leitor.stop();
+    const c = await new Html5Qrcode('leitor-foto', { formatsToSupport: FORMATOS, verbose: false }).scanFile(f, false);
+    ultimo = { c: '', t: 0 }; lido(c);
+  } catch (err) {
+    el('camera-msg').textContent = 'Não achei um código na foto. Tente de mais perto e com boa luz.';
+  }
+};
+
+/* ---------- JANELAS ---------- */
+function janela(html) { el('janela-conteudo').innerHTML = html; el('janela').showModal(); }
+function fecharJanela() { el('janela').close(); }
+
+/* ---------- PRODUTOS ---------- */
+function listarProdutos() {
+  const q = el('p-busca').value.trim().toLowerCase();
+  const lista = DB.produtos.filter(p => !q || p.nome.toLowerCase().includes(q) || p.codigo.includes(q))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+  el('p-lista').innerHTML = lista.length ? lista.map(p => `
+    <div class="item clicavel" onclick="abrirProduto(produto('${esc(p.codigo)}'))">
+      <div class="info"><div class="nome">${esc(p.nome)}</div>
+      <div class="sub">${esc(p.codigo)} · <span class="${p.estoque <= p.minimo ? 'baixo' : ''}">${p.estoque} em estoque</span></div></div>
+      <div class="preco">${brl(p.preco)}</div></div>`).join('')
+    : `<div class="vazio">${q ? 'Nenhum produto encontrado.' : 'Cadastre o primeiro produto para começar.'}</div>`;
+}
+el('p-busca').oninput = listarProdutos;
+
+function abrirProduto(p, voltarParaVenda) {
+  p = p || { novo: true };
+  const novo = !!p.novo;
+  janela(`<h3>${novo ? 'Cadastrar produto' : 'Editar produto'}</h3>
+    ${voltarParaVenda ? '<p class="dica">Este código ainda não está cadastrado.</p>' : ''}
+    <label for="j-codigo">Código de barras</label>
+    <div class="campo"><input type="text" id="j-codigo" value="${esc(p.codigo || '')}" ${novo ? '' : 'readonly'}>
+      ${novo ? `<button class="btn" onclick="lerCamera(c => { el('janela').showModal(); el('j-codigo').value = c; }); fecharJanela()">📷</button>` : ''}</div>
+    <label for="j-nome">Nome</label><input type="text" id="j-nome" value="${esc(p.nome || '')}">
+    <div class="grade">
+      <div><label for="j-preco">Preço (R$)</label><input type="number" inputmode="decimal" step="0.01" id="j-preco" value="${p.preco ?? ''}"></div>
+      <div><label for="j-minimo">Avisar quando tiver</label><input type="number" inputmode="numeric" id="j-minimo" value="${p.minimo ?? 3}"></div>
+    </div>
+    ${novo ? `<label for="j-estoque">Estoque inicial</label><input type="number" inputmode="numeric" id="j-estoque" value="0">`
+      : `<label for="j-entrada">Chegou mercadoria? Some ao estoque (atual: ${p.estoque})</label>
+         <div class="campo"><input type="number" inputmode="numeric" id="j-entrada" placeholder="Quantidade">
+         <button class="btn" onclick="darEntrada('${esc(p.codigo)}')">Somar</button></div>`}
+    <div class="acoes"><button class="btn" onclick="fecharJanela(); el('v-codigo').focus()">Cancelar</button>
+      <button class="btn principal" id="j-salvar">Salvar</button></div>`);
+  el(novo && !p.codigo ? 'j-codigo' : 'j-nome').focus();
+  el('j-salvar').onclick = async () => {
+    const dados = { novo, codigo: el('j-codigo').value, nome: el('j-nome').value.trim(),
+      preco: num(el('j-preco').value), minimo: num(el('j-minimo').value),
+      estoque: novo ? num(el('j-estoque').value) : p.estoque };
+    try {
+      el('j-salvar').disabled = true;
+      aplicar(await api('salvarProduto', dados)); fecharJanela(); aviso('Produto salvo');
+      if (voltarParaVenda) adicionar(dados.codigo);
+    } catch (e) { falha(e); el('j-salvar').disabled = false; }
+  };
+}
+
+async function darEntrada(codigo) {
+  const q = num(el('j-entrada').value);
+  if (!q) return aviso('Informe a quantidade', true);
+  try { aplicar(await api('entradaEstoque', codigo, q)); fecharJanela(); aviso('Estoque atualizado'); }
+  catch (e) { falha(e); }
+}
+
+/* ---------- FIADO ---------- */
+function listarClientes() {
+  const devendo = DB.clientes.filter(c => c.saldo > 0.009);
+  el('f-total').textContent = brl(devendo.reduce((s, c) => s + c.saldo, 0));
+  el('f-qtd').textContent = devendo.length;
+  const lista = [...DB.clientes].sort((a, b) => b.saldo - a.saldo);
+  el('f-lista').innerHTML = lista.length ? lista.map(c => `
+    <div class="item clicavel" onclick="abrirCliente(DB.clientes[${DB.clientes.indexOf(c)}].nome)">
+      <div class="info"><div class="nome">${esc(c.nome)}</div><div class="sub">${esc(c.telefone) || 'sem telefone'}</div></div>
+      <div class="preco ${c.saldo > 0.009 ? 'negativo' : ''}">${c.saldo > 0.009 ? brl(c.saldo) : 'em dia'}</div></div>`).join('')
+    : '<div class="vazio">Cadastre um cliente para poder vender fiado.</div>';
+}
+
+function abrirNovoCliente(daVenda) {
+  janela(`<h3>Cadastrar cliente</h3>
+    <label for="j-cnome">Nome</label><input type="text" id="j-cnome">
+    <label for="j-ctel">Telefone</label><input type="tel" id="j-ctel">
+    <div class="acoes"><button class="btn" onclick="fecharJanela()">Cancelar</button>
+    <button class="btn principal" id="j-csalvar">Salvar</button></div>`);
+  el('j-cnome').focus();
+  el('j-csalvar').onclick = async () => {
+    const nome = el('j-cnome').value.trim();
+    try {
+      aplicar(await api('salvarCliente', nome, el('j-ctel').value)); fecharJanela(); aviso('Cliente salvo');
+      if (daVenda) el('v-cliente').value = nome;
+    } catch (e) { falha(e); }
+  };
+}
+
+async function abrirCliente(nome) {
+  const c = DB.clientes.find(x => x.nome === nome);
+  janela(`<h3>${esc(nome)}</h3><p class="dica">Carregando…</p>`);
+  let ext = [];
+  try { ext = await api('extratoCliente', nome); } catch (e) { falha(e); }
+  const formas = DB.formas.filter(f => f !== 'Fiado');
+  janela(`<h3>${esc(nome)}</h3>
+    <div class="visor" style="margin:10px 0"><small>Deve</small><span class="valor">${brl(c.saldo)}</span></div>
+    <label for="j-pvalor">Registrar pagamento</label>
+    <div class="grade">
+      <input type="number" inputmode="decimal" step="0.01" id="j-pvalor" value="${c.saldo > 0 ? c.saldo.toFixed(2) : ''}">
+      <select id="j-pforma">${formas.map(f => `<option>${f}</option>`).join('')}</select>
+    </div>
+    <button class="btn principal grande" style="margin-top:10px" id="j-pagar">Registrar pagamento</button>
+    <h2 style="font-size:18px">Movimentações</h2>
+    <div class="lista" style="max-height:260px;overflow:auto">${ext.length ? ext.map(m => `
+      <div class="item"><div class="info"><div class="nome">${esc(m.tipo)}${m.forma ? ' (' + esc(m.forma) + ')' : ''}</div>
+      <div class="sub">${esc(m.data)}${m.obs ? ' · ' + esc(m.obs) : ''}</div></div>
+      <div class="preco ${m.tipo === 'Compra' ? 'negativo' : ''}">${m.tipo === 'Compra' ? '' : '−'}${brl(m.valor)}</div></div>`).join('')
+      : '<div class="vazio">Nenhuma movimentação ainda.</div>'}</div>
+    <div class="acoes"><button class="btn" onclick="fecharJanela()">Fechar</button></div>`);
+  el('j-pagar').onclick = async () => {
+    try {
+      aplicar(await api('registrarPagamento', nome, num(el('j-pvalor').value), el('j-pforma').value, ''));
+      fecharJanela(); aviso('Pagamento registrado');
+    } catch (e) { falha(e); }
+  };
+}
+
+/* ---------- RELATÓRIO ---------- */
+function periodo(dias) {
+  const fim = new Date(); let ini = new Date();
+  if (dias === 'mes') ini = new Date(fim.getFullYear(), fim.getMonth(), 1);
+  else ini.setDate(fim.getDate() - dias);
+  el('r-ini').value = hojeISO(ini); el('r-fim').value = hojeISO(fim);
+  carregarRelatorio();
+}
+
+async function carregarRelatorio() {
+  el('r-saida').innerHTML = '<p class="dica">Carregando…</p>';
+  try {
+    const r = await api('relatorio', el('r-ini').value, el('r-fim').value);
+    const linhasObj = (o, vazio) => Object.keys(o).length ? Object.entries(o).sort((a, b) => b[1] - a[1]).map(([k, v]) =>
+      `<div class="item"><div class="info nome">${esc(k)}</div><div class="preco">${brl(v)}</div></div>`).join('')
+      : `<div class="vazio">${vazio}</div>`;
+    el('r-saida').innerHTML = `
+      <div class="visor"><small>${r.qtdVendas} vendas</small><span class="valor">${brl(r.total)}</span></div>
+      <div class="grade"><div class="num"><b>${brl(r.qtdVendas ? r.total / r.qtdVendas : 0)}</b><span>ticket médio</span></div>
+      <div class="num"><b>${brl(Object.values(r.recebidoFiado).reduce((s, v) => s + v, 0))}</b><span>fiado recebido</span></div></div>
+      <h2>Por forma de pagamento</h2><div class="lista">${linhasObj(r.porForma, 'Sem vendas no período.')}</div>
+      <p class="dica">Vendas no fiado entram aqui como "Fiado". O dinheiro que entrou de quem pagou o fiado aparece abaixo.</p>
+      <h2>Fiado recebido</h2><div class="lista">${linhasObj(r.recebidoFiado, 'Nenhum pagamento de fiado no período.')}</div>
+      <h2>Mais vendidos</h2><div class="lista">${r.maisVendidos.length ? r.maisVendidos.map(p =>
+        `<div class="item"><div class="info"><div class="nome">${esc(p.nome)}</div><div class="sub">${p.qtd} un.</div></div>
+        <div class="preco">${brl(p.valor)}</div></div>`).join('') : '<div class="vazio">Sem vendas no período.</div>'}</div>
+      <h2>Estoque baixo</h2><div class="lista">${r.estoqueBaixo.length ? r.estoqueBaixo.map(p =>
+        `<div class="item"><div class="info nome">${esc(p.nome)}</div><div class="preco baixo">${p.estoque} (mín. ${p.minimo})</div></div>`).join('')
+        : '<div class="vazio">Tudo abastecido.</div>'}</div>
+      <h2>Vendas</h2><div class="lista">${r.vendas.length ? r.vendas.map(v => `
+        <div class="item ${v.situacao === 'Cancelada' ? 'cancelada' : ''}"><div class="info">
+        <div class="nome">${esc(v.forma)}${v.cliente ? ' · ' + esc(v.cliente) : ''}</div>
+        <div class="sub">${esc(v.data)}${v.situacao === 'Cancelada' ? ' · cancelada' : ''}</div></div>
+        <div class="preco">${brl(v.total)}</div>
+        ${v.situacao !== 'Cancelada' ? `<button class="btn perigo" style="padding:6px 10px" onclick="cancelar('${esc(v.id)}')">Cancelar</button>` : ''}
+        </div>`).join('') : '<div class="vazio">Nenhuma venda no período.</div>'}</div>`;
+  } catch (e) { el('r-saida').innerHTML = ''; falha(e); }
+}
+
+async function cancelar(id) {
+  if (!confirm('Cancelar esta venda? Os produtos voltam para o estoque.')) return;
+  try { aplicar(await api('cancelarVenda', id)); aviso('Venda cancelada'); carregarRelatorio(); }
+  catch (e) { falha(e); }
+}
+
+/* ---------- início ---------- */
+api('getDados').then(d => { aplicar(d); desenharFormas(); }).catch(falha);
+
+// Atualiza preços, estoque e clientes a cada 2 minutos (outros computadores podem ter mudado algo)
+setInterval(() => {
+  if (el('janela').open || document.hidden) return;
+  api('getDados').then(aplicar).catch(() => {});
+}, 120000);
+</script>
+</body>
+</html>
