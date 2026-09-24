@@ -55,6 +55,14 @@
   .btn.grande { width: 100%; padding: 16px; font-size: 18px; }
   .btn:disabled { opacity: .5; cursor: default; }
 
+  /* Produtos sem código de barras: botões de toque rápido */
+  .rapidos { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-top: 8px; }
+  .rapidos button { text-align: left; padding: 10px 12px; border-radius: 8px; border: 1.5px solid var(--linha);
+    background: var(--papel); line-height: 1.25; }
+  .rapidos button b { display: block; font-weight: 600; }
+  .rapidos button span { color: var(--suave); font-size: 14px; }
+  .rapidos button:active { border-color: var(--verde); }
+
   /* Visor do caixa: o elemento marcante da tela */
   .visor { background: var(--tinta); color: var(--amarelo); border-radius: 10px;
     padding: 14px 18px; margin: 16px 0; display: flex; justify-content: space-between; align-items: end; }
@@ -136,7 +144,11 @@
       <input type="text" id="v-codigo" placeholder="Bipe ou digite o código" autocomplete="off" autofocus>
       <button class="btn" id="v-camera" aria-label="Ler com a câmera">📷 Câmera</button>
     </div>
-    <p class="dica">Com a leitora, é só bipar. Para buscar pelo nome, digite e aperte Enter.</p>
+    <p class="dica">Com a leitora, é só bipar. Para buscar pelo nome, marca ou sabor, digite e aperte Enter.</p>
+    <div id="v-rapidos-box" hidden>
+      <h2 style="font-size:18px; margin-bottom:0">Sem código de barras</h2>
+      <div class="rapidos" id="v-rapidos"></div>
+    </div>
 
     <div class="visor"><small id="v-itens">Nenhum item</small><span class="valor" id="v-total">R$ 0,00</span></div>
 
@@ -288,9 +300,19 @@ let forma = '';
 function aplicar(d) {
   DB = d;
   el('status').textContent = DB.produtos.length + ' produtos';
-  desenharCarrinho(); listarProdutos(); listarClientes(); preencherClientes();
+  desenharCarrinho(); desenharRapidos(); listarProdutos(); listarClientes(); preencherClientes();
 }
 const produto = c => DB.produtos.find(p => p.codigo === String(c).trim());
+const nomeDe = p => p.completo || p.nome;
+const busca = p => (p.nome + ' ' + (p.marca || '') + ' ' + (p.variacao || '') + ' ' + p.codigo).toLowerCase();
+const semCodigo = p => /^SEM\d+$/.test(p.codigo);
+
+function desenharRapidos() {
+  const lista = DB.produtos.filter(semCodigo).sort((a, b) => nomeDe(a).localeCompare(nomeDe(b)));
+  el('v-rapidos-box').hidden = !lista.length;
+  el('v-rapidos').innerHTML = lista.map(p =>
+    `<button onclick="adicionar('${p.codigo}')"><b>${esc(nomeDe(p))}</b><span>${brl(p.preco)} · ${p.estoque} un.</span></button>`).join('');
+}
 
 /* ---------- abas ---------- */
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
@@ -307,7 +329,7 @@ function adicionar(codigo) {
   let p = produto(codigo);
   if (!p) {
     // tenta pelo nome
-    const achados = DB.produtos.filter(x => x.nome.toLowerCase().includes(codigo.toLowerCase()));
+    const achados = DB.produtos.filter(x => busca(x).includes(codigo.toLowerCase()));
     if (achados.length === 1) p = achados[0];
     else if (achados.length > 1) return escolherProduto(achados);
     else if (/^\d{4,}$/.test(codigo)) {
@@ -321,7 +343,7 @@ function adicionar(codigo) {
     else return aviso('Nenhum produto encontrado com "' + codigo + '"', true);
   }
   const it = carrinho.find(i => i.codigo === p.codigo);
-  if ((it ? it.qtd : 0) + 1 > p.estoque) return aviso('Só tem ' + p.estoque + ' de ' + p.nome + ' no estoque', true);
+  if ((it ? it.qtd : 0) + 1 > p.estoque) return aviso('Só tem ' + p.estoque + ' de ' + nomeDe(p) + ' no estoque', true);
   if (it) it.qtd++; else carrinho.push({ codigo: p.codigo, qtd: 1 });
   bip();
   desenharCarrinho();
@@ -330,7 +352,7 @@ function adicionar(codigo) {
 function escolherProduto(lista) {
   janela(`<h3>Qual produto?</h3><div class="lista" style="margin-top:12px">${lista.map(p =>
     `<div class="item clicavel" onclick="fecharJanela(); adicionar('${esc(p.codigo)}')">
-      <div class="info"><div class="nome">${esc(p.nome)}</div><div class="sub">${esc(p.codigo)}</div></div>
+      <div class="info"><div class="nome">${esc(nomeDe(p))}</div><div class="sub">${esc(p.codigo)}</div></div>
       <div class="preco">${brl(p.preco)}</div></div>`).join('')}</div>
     <div class="acoes"><button class="btn" onclick="fecharJanela()">Voltar</button></div>`);
 }
@@ -339,7 +361,7 @@ function mudarQtd(codigo, delta) {
   const it = carrinho.find(i => i.codigo === codigo);
   if (!it) return;
   const p = produto(codigo);
-  if (delta > 0 && p && it.qtd + delta > p.estoque) return aviso('Só tem ' + p.estoque + ' de ' + p.nome + ' no estoque', true);
+  if (delta > 0 && p && it.qtd + delta > p.estoque) return aviso('Só tem ' + p.estoque + ' de ' + nomeDe(p) + ' no estoque', true);
   it.qtd += delta;
   if (it.qtd <= 0) carrinho = carrinho.filter(i => i !== it);
   desenharCarrinho();
@@ -355,7 +377,7 @@ function desenharCarrinho() {
   el('v-total').textContent = brl(totalCarrinho());
   el('v-carrinho').innerHTML = carrinho.length ? carrinho.map(i => {
     const p = produto(i.codigo) || { nome: i.codigo, preco: 0 };
-    return `<div class="item"><div class="info"><div class="nome">${esc(p.nome)}</div>
+    return `<div class="item"><div class="info"><div class="nome">${esc(nomeDe(p))}</div>
       <div class="sub">${brl(p.preco)} cada</div></div>
       <div class="qtd"><button onclick="mudarQtd('${esc(i.codigo)}',-1)" aria-label="Menos">−</button>
       <span>${i.qtd}</span><button onclick="mudarQtd('${esc(i.codigo)}',1)" aria-label="Mais">+</button></div>
@@ -442,7 +464,7 @@ function lido(codigo) {
   if (codigo === ultimo.c && agora - ultimo.t < 1800) return; // evita ler o mesmo 2x seguidas
   ultimo = { c: codigo, t: agora };
   if (continuo) {
-    el('camera-msg').textContent = '✓ ' + (produto(codigo)?.nome || codigo);
+    el('camera-msg').textContent = '✓ ' + (produto(codigo) ? nomeDe(produto(codigo)) : codigo);
     if (!produto(codigo)) { fecharCamera(); }
     aoLer(codigo);
   } else { fecharCamera(); aoLer(codigo); }
@@ -475,12 +497,12 @@ const margemTxt = p => p.custo > 0 && p.preco > 0 ? Math.round((p.preco - p.cust
 
 function listarProdutos() {
   const q = el('p-busca').value.trim().toLowerCase();
-  const lista = DB.produtos.filter(p => !q || p.nome.toLowerCase().includes(q) || p.codigo.includes(q))
-    .sort((a, b) => a.nome.localeCompare(b.nome));
+  const lista = DB.produtos.filter(p => !q || busca(p).includes(q))
+    .sort((a, b) => nomeDe(a).localeCompare(nomeDe(b)));
   el('p-lista').innerHTML = lista.length ? lista.map(p => `
     <div class="item clicavel" onclick="abrirProduto(produto('${esc(p.codigo)}'))">
-      <div class="info"><div class="nome">${esc(p.nome)}</div>
-      <div class="sub"><span class="${p.estoque <= p.minimo ? 'baixo' : ''}">${p.estoque} em estoque</span> ·
+      <div class="info"><div class="nome">${esc(nomeDe(p))}</div>
+      <div class="sub">${semCodigo(p) ? 'sem código · ' : ''}<span class="${p.estoque <= p.minimo ? 'baixo' : ''}">${p.estoque} em estoque</span> ·
         ${p.custo > 0 ? 'lucro ' + brl(lucroUn(p)) + '/un (' + margemTxt(p) + ')' : '<span class="baixo">sem custo</span>'}</div></div>
       <div class="preco">${brl(p.preco)}</div></div>`).join('')
     : `<div class="vazio">${q ? 'Nenhum produto encontrado.' : 'Cadastre o primeiro produto para começar.'}</div>`;
@@ -493,9 +515,14 @@ function abrirProduto(p, voltarParaVenda) {
   janela(`<h3>${novo ? 'Cadastrar produto' : 'Editar produto'}</h3>
     ${voltarParaVenda ? '<p class="dica">Este código ainda não está cadastrado.</p>' : ''}
     <label for="j-codigo">Código de barras</label>
-    <div class="campo"><input type="text" id="j-codigo" value="${esc(p.codigo || '')}" ${novo ? '' : 'readonly'}>
+    <div class="campo"><input type="text" id="j-codigo" value="${esc(p.codigo || '')}" ${novo ? 'placeholder="Deixe em branco se não tiver"' : 'readonly'}>
       ${novo ? `<button class="btn" onclick="lerCamera(c => { el('janela').showModal(); el('j-codigo').value = c; }); fecharJanela()">📷</button>` : ''}</div>
-    <label for="j-nome">Nome</label><input type="text" id="j-nome" value="${esc(p.nome || '')}">
+    ${novo ? '<p class="dica">Produto sem código (bala avulsa, salgado…) aparece como botão na tela de vender.</p>' : ''}
+    <label for="j-nome">Produto</label><input type="text" id="j-nome" placeholder="Ex.: Bala, Refrigerante lata" value="${esc(p.nome || '')}">
+    <div class="grade">
+      <div><label for="j-marca">Marca (opcional)</label><input type="text" id="j-marca" placeholder="Ex.: Fini" value="${esc(p.marca || '')}"></div>
+      <div><label for="j-variacao">Sabor / tipo (opcional)</label><input type="text" id="j-variacao" placeholder="Ex.: Morango" value="${esc(p.variacao || '')}"></div>
+    </div>
     <div class="grade">
       <div><label for="j-custo">Quanto você paga (R$/un)</label><input type="number" inputmode="decimal" step="0.01" id="j-custo" value="${p.custo ? +p.custo.toFixed(2) : ''}"></div>
       <div><label for="j-preco">Preço de venda (R$)</label><input type="number" inputmode="decimal" step="0.01" id="j-preco" value="${p.preco ?? ''}"></div>
@@ -519,7 +546,7 @@ function abrirProduto(p, voltarParaVenda) {
       <div class="lista" id="j-compras" style="max-height:200px;overflow:auto"><div class="vazio">Carregando…</div></div>`}
     <div class="acoes"><button class="btn" onclick="fecharJanela(); el('v-codigo').focus()">Cancelar</button>
       <button class="btn principal" id="j-salvar">Salvar</button></div>`);
-  el(novo && !p.codigo ? 'j-codigo' : 'j-nome').focus();
+  el('j-nome').focus();
 
   const margem = () => {
     const c = num(el('j-custo').value), v = num(el('j-preco').value);
@@ -541,13 +568,14 @@ function abrirProduto(p, voltarParaVenda) {
   }
 
   el('j-salvar').onclick = async () => {
-    const dados = { novo, codigo: el('j-codigo').value, nome: el('j-nome').value.trim(),
+    const dados = { novo, codigo: el('j-codigo').value.trim(), nome: el('j-nome').value.trim(),
+      marca: el('j-marca').value.trim(), variacao: el('j-variacao').value.trim(),
       preco: num(el('j-preco').value), minimo: num(el('j-minimo').value), custo: num(el('j-custo').value),
       estoque: novo ? num(el('j-estoque').value) : p.estoque };
     try {
       el('j-salvar').disabled = true;
       aplicar(await api('salvarProduto', dados)); fecharJanela(); aviso('Produto salvo');
-      if (voltarParaVenda) adicionar(dados.codigo);
+      if (voltarParaVenda && dados.codigo) adicionar(dados.codigo);
     } catch (e) { falha(e); el('j-salvar').disabled = false; }
   };
 }
