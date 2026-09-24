@@ -712,7 +712,13 @@ function abrirProduto(p, voltarParaVenda) {
       estoque: novo ? num(el('j-estoque').value) : p.estoque };
     try {
       el('j-salvar').disabled = true;
-      aplicar(await api('salvarProduto', dados)); fecharJanela(); aviso('Produto salvo');
+      aplicar(await api('salvarProduto', dados));
+      // Se preencheu "Chegou mercadoria" e clicou em Salvar, registra a compra também
+      const qEntrada = !novo && el('j-entrada') ? num(el('j-entrada').value) : 0;
+      if (qEntrada > 0) {
+        aplicar(await api('entradaEstoque', p.codigo, qEntrada, num(el('j-ecusto').value), el('j-eobs').value.trim()));
+        fecharJanela(); aviso('Produto salvo e ' + qEntrada + ' un. somadas ao estoque');
+      } else { fecharJanela(); aviso('Produto salvo'); }
       if (voltarParaVenda && dados.codigo) adicionar(dados.codigo);
     } catch (e) { falha(e); el('j-salvar').disabled = false; }
   };
