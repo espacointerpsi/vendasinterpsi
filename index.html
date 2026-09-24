@@ -321,9 +321,9 @@ function adicionar(codigo) {
     else return aviso('Nenhum produto encontrado com "' + codigo + '"', true);
   }
   const it = carrinho.find(i => i.codigo === p.codigo);
+  if ((it ? it.qtd : 0) + 1 > p.estoque) return aviso('Só tem ' + p.estoque + ' de ' + p.nome + ' no estoque', true);
   if (it) it.qtd++; else carrinho.push({ codigo: p.codigo, qtd: 1 });
   bip();
-  if (p.estoque - (it ? it.qtd : 1) < 0) aviso('Atenção: estoque de ' + p.nome + ' está zerado na planilha', true);
   desenharCarrinho();
 }
 
@@ -338,6 +338,8 @@ function escolherProduto(lista) {
 function mudarQtd(codigo, delta) {
   const it = carrinho.find(i => i.codigo === codigo);
   if (!it) return;
+  const p = produto(codigo);
+  if (delta > 0 && p && it.qtd + delta > p.estoque) return aviso('Só tem ' + p.estoque + ' de ' + p.nome + ' no estoque', true);
   it.qtd += delta;
   if (it.qtd <= 0) carrinho = carrinho.filter(i => i !== it);
   desenharCarrinho();
