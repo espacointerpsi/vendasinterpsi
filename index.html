@@ -168,6 +168,12 @@
       <input type="number" id="v-recebido" inputmode="decimal" step="0.01" placeholder="0,00">
       <p class="dica" id="v-troco"></p>
     </div>
+    <div id="v-dividir" hidden>
+      <p class="dica">Informe quanto foi pago em cada forma.</p>
+      <div id="v-partes"></div>
+      <button class="btn" style="margin-top:8px" onclick="addParte()">+ Adicionar forma</button>
+      <p class="dica" id="v-resta" style="margin-top:8px"></p>
+    </div>
 
     <div style="margin-top:20px; display:flex; gap:8px">
       <button class="btn perigo" id="v-limpar">Limpar</button>
@@ -296,6 +302,7 @@ function bip() {
 let DB = { produtos: [], clientes: [], formas: [] };
 let carrinho = [];            // [{codigo, qtd}]
 let forma = '';
+let dividido = false, partes = [];   // pagamento dividido: [{forma, valor}]
 
 function aplicar(d) {
   DB = d;
@@ -388,15 +395,57 @@ function desenharCarrinho() {
 
 function desenharFormas() {
   el('v-formas').innerHTML = DB.formas.map(f =>
-    `<button class="${f === forma ? 'ativo' : ''}" onclick="escolherForma('${f}')">${f}</button>`).join('');
-  el('v-extra-fiado').hidden = forma !== 'Fiado';
-  el('v-extra-dinheiro').hidden = forma !== 'Dinheiro';
+    `<button class="${!dividido && f === forma ? 'ativo' : ''}" onclick="escolherForma('${f}')">${f}</button>`).join('') +
+    `<button class="${dividido ? 'ativo' : ''}" onclick="escolherDividir()">Dividir</button>`;
+  const temFiado = dividido ? partes.some(p => p.forma === 'Fiado') : forma === 'Fiado';
+  el('v-extra-fiado').hidden = !temFiado;
+  el('v-extra-dinheiro').hidden = dividido || forma !== 'Dinheiro';
+  el('v-dividir').hidden = !dividido;
+  if (dividido) desenharPartes();
 }
-function escolherForma(f) { forma = f; desenharFormas(); calcularTroco(); }
+function escolherForma(f) { dividido = false; forma = f; desenharFormas(); calcularTroco(); }
+
+function escolherDividir() {
+  dividido = true; forma = '';
+  if (!partes.length) partes = [{ forma: 'Pix', valor: '' }, { forma: 'Dinheiro', valor: '' }];
+  desenharFormas();
+}
+function addParte() { partes.push({ forma: 'Pix', valor: '' }); desenharFormas(); }
+
+function desenharPartes() {
+  el('v-partes').innerHTML = partes.map((p, i) => `
+    <div class="campo" style="margin-top:8px">
+      <select onchange="partes[${i}].forma = this.value; desenharFormas()">
+        ${DB.formas.map(f => `<option ${f === p.forma ? 'selected' : ''}>${f}</option>`).join('')}</select>
+      <input type="number" inputmode="decimal" step="0.01" placeholder="R$ 0,00" value="${p.valor}"
+        oninput="partes[${i}].valor = this.value; calcularResta()">
+      ${partes.length > 2 ? `<button class="btn perigo" onclick="partes.splice(${i}, 1); desenharFormas()" aria-label="Remover">✕</button>` : ''}
+    </div>`).join('');
+  calcularResta();
+}
+
+function restante() { return +(totalCarrinho() - partes.reduce((s, p) => s + num(p.valor), 0)).toFixed(2); }
+
+function calcularResta() {
+  const r = restante();
+  el('v-resta').innerHTML = !carrinho.length ? '' :
+    Math.abs(r) < 0.01 ? '✓ Os valores batem com o total.' :
+    r > 0 ? `Falta ${brl(r)} <button class="btn" style="padding:4px 10px; margin-left:6px" onclick="completarParte()">Completar</button>`
+          : `<span class="baixo">Passou ${brl(-r)} do total.</span>`;
+}
+
+/* Coloca o que falta na forma que está vazia (ou na última) */
+function completarParte() {
+  const r = restante();
+  const alvo = partes.find(p => !num(p.valor)) || partes[partes.length - 1];
+  alvo.valor = (num(alvo.valor) + r).toFixed(2);
+  desenharPartes();
+}
 
 function calcularTroco() {
   const rec = num(el('v-recebido').value), t = totalCarrinho();
   el('v-troco').textContent = rec ? (rec >= t ? 'Troco: ' + brl(rec - t) : 'Faltam ' + brl(t - rec)) : '';
+  if (dividido) calcularResta();
 }
 
 function preencherClientes() {
@@ -406,18 +455,23 @@ function preencherClientes() {
 }
 
 function limparVenda() {
-  carrinho = []; forma = ''; el('v-recebido').value = ''; el('v-cliente').value = '';
+  carrinho = []; forma = ''; dividido = false; partes = []; el('v-recebido').value = ''; el('v-cliente').value = '';
   desenharFormas(); desenharCarrinho(); el('v-codigo').focus();
 }
 
 async function finalizar() {
   if (!carrinho.length) return aviso('A venda está vazia', true);
-  if (!forma) return aviso('Escolha a forma de pagamento', true);
+  if (!dividido && !forma) return aviso('Escolha a forma de pagamento', true);
+  if (dividido && Math.abs(restante()) >= 0.01) return aviso('Os valores das formas de pagamento não batem com o total', true);
   const cliente = el('v-cliente').value;
-  if (forma === 'Fiado' && !cliente) return aviso('Escolha o cliente do fiado', true);
+  const temFiado = dividido ? partes.some(p => p.forma === 'Fiado' && num(p.valor) > 0) : forma === 'Fiado';
+  if (temFiado && !cliente) return aviso('Escolha o cliente do fiado', true);
   const b = el('v-finalizar'); b.disabled = true; b.textContent = 'Salvando…';
   try {
-    const r = await api('finalizarVenda', { itens: carrinho, forma, cliente });
+    const pedido = dividido
+      ? { itens: carrinho, cliente, pagamentos: partes.map(p => ({ forma: p.forma, valor: num(p.valor) })) }
+      : { itens: carrinho, forma, cliente };
+    const r = await api('finalizarVenda', pedido);
     aplicar(r.dados); limparVenda();
     aviso('Venda registrada: ' + brl(r.total));
     if (r.avisos.length) setTimeout(() => aviso('Estoque baixo: ' + r.avisos.join('; '), true), 2300);
@@ -428,7 +482,7 @@ async function finalizar() {
 el('v-codigo').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); adicionar(e.target.value); e.target.value = ''; }
 });
-el('v-camera').onclick = () => lerCamera(adicionar, true);
+el('v-camera').onclick = () => lerCamera(adicionar, false);
 el('v-recebido').oninput = calcularTroco;
 el('v-limpar').onclick = () => { if (!carrinho.length || confirm('Limpar a venda atual?')) limparVenda(); };
 el('v-finalizar').onclick = finalizar;
