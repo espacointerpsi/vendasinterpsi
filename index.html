@@ -468,6 +468,9 @@ function janela(html) { el('janela-conteudo').innerHTML = html; el('janela').sho
 function fecharJanela() { el('janela').close(); }
 
 /* ---------- PRODUTOS ---------- */
+const lucroUn = p => p.custo > 0 ? p.preco - p.custo : null;
+const margemTxt = p => p.custo > 0 && p.preco > 0 ? Math.round((p.preco - p.custo) / p.preco * 100) + '%' : '';
+
 function listarProdutos() {
   const q = el('p-busca').value.trim().toLowerCase();
   const lista = DB.produtos.filter(p => !q || p.nome.toLowerCase().includes(q) || p.codigo.includes(q))
@@ -475,7 +478,8 @@ function listarProdutos() {
   el('p-lista').innerHTML = lista.length ? lista.map(p => `
     <div class="item clicavel" onclick="abrirProduto(produto('${esc(p.codigo)}'))">
       <div class="info"><div class="nome">${esc(p.nome)}</div>
-      <div class="sub">${esc(p.codigo)} · <span class="${p.estoque <= p.minimo ? 'baixo' : ''}">${p.estoque} em estoque</span></div></div>
+      <div class="sub"><span class="${p.estoque <= p.minimo ? 'baixo' : ''}">${p.estoque} em estoque</span> ·
+        ${p.custo > 0 ? 'lucro ' + brl(lucroUn(p)) + '/un (' + margemTxt(p) + ')' : '<span class="baixo">sem custo</span>'}</div></div>
       <div class="preco">${brl(p.preco)}</div></div>`).join('')
     : `<div class="vazio">${q ? 'Nenhum produto encontrado.' : 'Cadastre o primeiro produto para começar.'}</div>`;
 }
@@ -491,19 +495,52 @@ function abrirProduto(p, voltarParaVenda) {
       ${novo ? `<button class="btn" onclick="lerCamera(c => { el('janela').showModal(); el('j-codigo').value = c; }); fecharJanela()">📷</button>` : ''}</div>
     <label for="j-nome">Nome</label><input type="text" id="j-nome" value="${esc(p.nome || '')}">
     <div class="grade">
-      <div><label for="j-preco">Preço (R$)</label><input type="number" inputmode="decimal" step="0.01" id="j-preco" value="${p.preco ?? ''}"></div>
+      <div><label for="j-custo">Quanto você paga (R$/un)</label><input type="number" inputmode="decimal" step="0.01" id="j-custo" value="${p.custo ? +p.custo.toFixed(2) : ''}"></div>
+      <div><label for="j-preco">Preço de venda (R$)</label><input type="number" inputmode="decimal" step="0.01" id="j-preco" value="${p.preco ?? ''}"></div>
+    </div>
+    <p class="dica" id="j-margem"></p>
+    <div class="grade">
+      ${novo ? `<div><label for="j-estoque">Estoque inicial</label><input type="number" inputmode="numeric" id="j-estoque" value="0"></div>` : ''}
       <div><label for="j-minimo">Avisar quando tiver</label><input type="number" inputmode="numeric" id="j-minimo" value="${p.minimo ?? 3}"></div>
     </div>
-    ${novo ? `<label for="j-estoque">Estoque inicial</label><input type="number" inputmode="numeric" id="j-estoque" value="0">`
-      : `<label for="j-entrada">Chegou mercadoria? Some ao estoque (atual: ${p.estoque})</label>
-         <div class="campo"><input type="number" inputmode="numeric" id="j-entrada" placeholder="Quantidade">
-         <button class="btn" onclick="darEntrada('${esc(p.codigo)}')">Somar</button></div>`}
+    ${novo ? '' : `
+      <h2 style="font-size:18px">Chegou mercadoria</h2>
+      <p class="dica">Estoque atual: ${p.estoque}. O custo médio é recalculado a cada compra.</p>
+      <div class="grade">
+        <div><label for="j-entrada">Quantidade</label><input type="number" inputmode="numeric" id="j-entrada"></div>
+        <div><label for="j-ecusto">Paguei por unidade (R$)</label><input type="number" inputmode="decimal" step="0.01" id="j-ecusto" value="${p.custo ? +p.custo.toFixed(2) : ''}"></div>
+      </div>
+      <label for="j-eobs">Onde comprou (opcional)</label>
+      <div class="campo"><input type="text" id="j-eobs" placeholder="Ex.: Atacadão">
+        <button class="btn principal" onclick="darEntrada('${esc(p.codigo)}')">Registrar compra</button></div>
+      <h2 style="font-size:18px">Compras anteriores</h2>
+      <div class="lista" id="j-compras" style="max-height:200px;overflow:auto"><div class="vazio">Carregando…</div></div>`}
     <div class="acoes"><button class="btn" onclick="fecharJanela(); el('v-codigo').focus()">Cancelar</button>
       <button class="btn principal" id="j-salvar">Salvar</button></div>`);
   el(novo && !p.codigo ? 'j-codigo' : 'j-nome').focus();
+
+  const margem = () => {
+    const c = num(el('j-custo').value), v = num(el('j-preco').value);
+    el('j-margem').textContent = c > 0 && v > 0
+      ? 'Lucro de ' + brl(v - c) + ' por unidade (' + Math.round((v - c) / v * 100) + '% do preço)' + (v < c ? ' — atenção: vendendo abaixo do custo' : '')
+      : '';
+  };
+  el('j-custo').oninput = margem; el('j-preco').oninput = margem; margem();
+
+  if (!novo) {
+    api('historicoCompras', p.codigo).then(lista => {
+      if (!el('j-compras')) return;
+      el('j-compras').innerHTML = lista.length ? lista.map(c => `
+        <div class="item"><div class="info"><div class="nome">${c.qtd} un. ${c.custo ? 'a ' + brl(c.custo) : ''}</div>
+        <div class="sub">${esc(c.data)}${c.obs ? ' · ' + esc(c.obs) : ''}</div></div>
+        <div class="preco">${c.total ? brl(c.total) : '—'}</div></div>`).join('')
+        : '<div class="vazio">Nenhuma compra registrada ainda.</div>';
+    }).catch(() => {});
+  }
+
   el('j-salvar').onclick = async () => {
     const dados = { novo, codigo: el('j-codigo').value, nome: el('j-nome').value.trim(),
-      preco: num(el('j-preco').value), minimo: num(el('j-minimo').value),
+      preco: num(el('j-preco').value), minimo: num(el('j-minimo').value), custo: num(el('j-custo').value),
       estoque: novo ? num(el('j-estoque').value) : p.estoque };
     try {
       el('j-salvar').disabled = true;
@@ -515,9 +552,13 @@ function abrirProduto(p, voltarParaVenda) {
 
 async function darEntrada(codigo) {
   const q = num(el('j-entrada').value);
-  if (!q) return aviso('Informe a quantidade', true);
-  try { aplicar(await api('entradaEstoque', codigo, q)); fecharJanela(); aviso('Estoque atualizado'); }
-  catch (e) { falha(e); }
+  if (!q) return aviso('Informe a quantidade que chegou', true);
+  const custo = num(el('j-ecusto').value);
+  if (!custo && !confirm('Registrar sem informar quanto pagou? O lucro desse lote não será calculado corretamente.')) return;
+  try {
+    aplicar(await api('entradaEstoque', codigo, q, custo, el('j-eobs').value.trim()));
+    fecharJanela(); aviso('Compra registrada');
+  } catch (e) { falha(e); }
 }
 
 /* ---------- FIADO ---------- */
@@ -596,13 +637,19 @@ async function carregarRelatorio() {
       : `<div class="vazio">${vazio}</div>`;
     el('r-saida').innerHTML = `
       <div class="visor"><small>${r.qtdVendas} vendas</small><span class="valor">${brl(r.total)}</span></div>
-      <div class="grade"><div class="num"><b>${brl(r.qtdVendas ? r.total / r.qtdVendas : 0)}</b><span>ticket médio</span></div>
-      <div class="num"><b>${brl(Object.values(r.recebidoFiado).reduce((s, v) => s + v, 0))}</b><span>fiado recebido</span></div></div>
+      <div class="grade">
+        <div class="num"><b>${brl(r.lucro)}</b><span>lucro (margem ${String(r.margem).replace('.', ',')}%)</span></div>
+        <div class="num"><b>${brl(r.custoTotal)}</b><span>custo do que foi vendido</span></div>
+        <div class="num"><b>${brl(r.gastoCompras)}</b><span>gasto em compras no período</span></div>
+        <div class="num"><b>${brl(r.qtdVendas ? r.total / r.qtdVendas : 0)}</b><span>ticket médio</span></div>
+        <div class="num"><b>${brl(Object.values(r.recebidoFiado).reduce((s, v) => s + v, 0))}</b><span>fiado recebido</span></div>
+      </div>
+      ${r.vendidoSemCusto > 0 ? `<p class="dica baixo">${brl(r.vendidoSemCusto)} em vendas de produtos sem custo cadastrado ficaram fora do lucro. Cadastre o custo em Produtos.</p>` : ''}
       <h2>Por forma de pagamento</h2><div class="lista">${linhasObj(r.porForma, 'Sem vendas no período.')}</div>
       <p class="dica">Vendas no fiado entram aqui como "Fiado". O dinheiro que entrou de quem pagou o fiado aparece abaixo.</p>
       <h2>Fiado recebido</h2><div class="lista">${linhasObj(r.recebidoFiado, 'Nenhum pagamento de fiado no período.')}</div>
       <h2>Mais vendidos</h2><div class="lista">${r.maisVendidos.length ? r.maisVendidos.map(p =>
-        `<div class="item"><div class="info"><div class="nome">${esc(p.nome)}</div><div class="sub">${p.qtd} un.</div></div>
+        `<div class="item"><div class="info"><div class="nome">${esc(p.nome)}</div><div class="sub">${p.qtd} un. · ${p.semCusto && !p.lucro ? 'sem custo' : 'lucro ' + brl(p.lucro)}</div></div>
         <div class="preco">${brl(p.valor)}</div></div>`).join('') : '<div class="vazio">Sem vendas no período.</div>'}</div>
       <h2>Estoque baixo</h2><div class="lista">${r.estoqueBaixo.length ? r.estoqueBaixo.map(p =>
         `<div class="item"><div class="info nome">${esc(p.nome)}</div><div class="preco baixo">${p.estoque} (mín. ${p.minimo})</div></div>`).join('')
