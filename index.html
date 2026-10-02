@@ -94,6 +94,17 @@
   .num span { color: var(--suave); font-size: 14px; }
   .atalhos { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
   .atalhos .btn { padding: 8px 12px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; vertical-align: middle; }
+  .tag.aberto { background: #FBE3D6; color: var(--alerta); }
+  .tag.parcial { background: #FCEFC7; color: #7A5A00; }
+  .tag.pago { background: #DDF0E7; color: var(--verde-escuro); }
+  .tag.cancel { background: var(--linha); color: var(--suave); }
+  .compra { padding: 12px 14px; border-top: 1px solid var(--linha); }
+  .compra:first-child { border-top: 0; }
+  .compra .linha1 { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .compra .itens { margin: 4px 0; }
+  .compra .quando { color: var(--suave); font-size: 14px; }
+  .compra.quitada .itens, .compra.quitada .linha1 b { opacity: .6; }
   .cancelada .nome, .cancelada .preco { text-decoration: line-through; opacity: .55; }
 
   /* Câmera */
@@ -786,29 +797,53 @@ function abrirNovoCliente(daVenda) {
 async function abrirCliente(nome) {
   const c = DB.clientes.find(x => x.nome === nome);
   janela(`<h3>${esc(nome)}</h3><p class="dica">Carregando…</p>`);
-  let ext = [];
+  let ext = { compras: [], pagamentos: [], credito: 0 };
   try { ext = await api('extratoCliente', nome); } catch (e) { falha(e); }
   const formas = DB.formas.filter(f => f !== 'Fiado');
+  const abertas = ext.compras.filter(x => x.status === 'Em aberto' || x.status === 'Parcial');
+  const quitadas = ext.compras.filter(x => x.status === 'Pago' || x.status === 'Cancelada');
+
+  const tag = s => `<span class="tag ${{ 'Em aberto': 'aberto', 'Parcial': 'parcial', 'Pago': 'pago', 'Cancelada': 'cancel' }[s]}">${
+    { 'Em aberto': 'Não pago', 'Parcial': 'Pago em parte', 'Pago': 'Pago', 'Cancelada': 'Cancelada' }[s]}</span>`;
+
+  const cartao = x => `
+    <div class="compra ${x.status === 'Pago' || x.status === 'Cancelada' ? 'quitada' : ''}">
+      <div class="linha1"><span>${tag(x.status)}</span><b>${brl(x.valor)}</b></div>
+      <div class="itens">${x.itens ? esc(x.itens) : '<span class="quando">itens não registrados</span>'}</div>
+      <div class="quando">🛒 Pegou em ${esc(x.pegoEm)}</div>
+      ${x.pagamentos.map(p => `<div class="quando">✓ Pagou ${brl(p.valor)} em ${esc(p.data)}${p.forma ? ' (' + esc(p.forma) + ')' : ''}</div>`).join('')}
+      ${x.status === 'Parcial' ? `<div class="quando baixo">Falta ${brl(x.falta)}</div>` : ''}
+    </div>`;
+
   janela(`<h3>${esc(nome)}</h3>
-    <div class="visor" style="margin:10px 0"><small>Deve</small><span class="valor">${brl(c.saldo)}</span></div>
+    <div class="visor" style="margin:10px 0"><small>${c.saldo > 0.009 ? 'Deve' : 'Em dia'}</small><span class="valor">${brl(Math.max(c.saldo, 0))}</span></div>
+    ${ext.credito > 0.009 ? `<p class="dica">Tem ${brl(ext.credito)} de crédito (pagou a mais).</p>` : ''}
     <label for="j-pvalor">Registrar pagamento</label>
     <div class="grade">
       <input type="number" inputmode="decimal" step="0.01" id="j-pvalor" value="${c.saldo > 0 ? c.saldo.toFixed(2) : ''}">
       <select id="j-pforma">${formas.map(f => `<option>${f}</option>`).join('')}</select>
     </div>
     <button class="btn principal grande" style="margin-top:10px" id="j-pagar">Registrar pagamento</button>
-    <h2 style="font-size:18px">Movimentações</h2>
-    <div class="lista" style="max-height:260px;overflow:auto">${ext.length ? ext.map(m => `
-      <div class="item"><div class="info"><div class="nome">${esc(m.tipo)}${m.forma ? ' (' + esc(m.forma) + ')' : ''}</div>
-      <div class="sub">${esc(m.data)}${m.obs ? ' · ' + esc(m.obs) : ''}</div>
-      ${m.itens ? `<div class="sub" style="color:var(--tinta)">${esc(m.itens)}</div>` : ''}</div>
-      <div class="preco ${m.tipo === 'Compra' ? 'negativo' : ''}">${m.tipo === 'Compra' ? '' : '−'}${brl(m.valor)}</div></div>`).join('')
-      : '<div class="vazio">Nenhuma movimentação ainda.</div>'}</div>
+    <p class="dica">O pagamento quita primeiro as compras mais antigas.</p>
+
+    <h2 style="font-size:18px">Não pago (${abertas.length})</h2>
+    <div class="lista">${abertas.length ? abertas.map(cartao).join('') : '<div class="vazio">Nada em aberto. 🎉</div>'}</div>
+
+    <h2 style="font-size:18px">Já pago (${quitadas.length})</h2>
+    <div class="lista" style="max-height:280px; overflow:auto">${quitadas.length ? quitadas.map(cartao).join('') : '<div class="vazio">Nenhuma compra paga ainda.</div>'}</div>
+
+    <h2 style="font-size:18px">Pagamentos recebidos (${ext.pagamentos.length})</h2>
+    <div class="lista" style="max-height:200px; overflow:auto">${ext.pagamentos.length ? ext.pagamentos.map(p => `
+      <div class="item"><div class="info"><div class="nome">${esc(p.data)}</div>
+      <div class="sub">${esc(p.forma) || 'forma não informada'}${p.obs ? ' · ' + esc(p.obs) : ''}</div></div>
+      <div class="preco">${brl(p.valor)}</div></div>`).join('') : '<div class="vazio">Nenhum pagamento ainda.</div>'}</div>
+
     <div class="acoes"><button class="btn" onclick="fecharJanela()">Fechar</button></div>`);
   el('j-pagar').onclick = async () => {
     try {
       aplicar(await api('registrarPagamento', nome, num(el('j-pvalor').value), el('j-pforma').value, ''));
-      fecharJanela(); aviso('Pagamento registrado');
+      aviso('Pagamento registrado');
+      abrirCliente(nome);   // reabre já atualizado
     } catch (e) { falha(e); }
   };
 }
@@ -842,16 +877,17 @@ async function carregarRelatorio() {
       <h2>Por forma de pagamento</h2><div class="lista">${linhasObj(r.porForma, 'Sem vendas no período.')}</div>
       <p class="dica">Vendas no fiado entram aqui como "Fiado". O dinheiro que entrou de quem pagou o fiado aparece abaixo.</p>
       <h2>Fiado recebido</h2><div class="lista">${linhasObj(r.recebidoFiado, 'Nenhum pagamento de fiado no período.')}</div>
-      <h2>Mais vendidos</h2><div class="lista">${r.maisVendidos.length ? r.maisVendidos.map(p =>
+      <h2>Itens vendidos no período</h2><div class="lista" style="max-height:420px; overflow:auto">${r.maisVendidos.length ? r.maisVendidos.map(p =>
         `<div class="item"><div class="info"><div class="nome">${esc(p.nome)}</div><div class="sub">${p.qtd} un. · ${p.semCusto && !p.lucro ? 'sem custo' : 'lucro ' + brl(p.lucro)}</div></div>
         <div class="preco">${brl(p.valor)}</div></div>`).join('') : '<div class="vazio">Sem vendas no período.</div>'}</div>
       <h2>Estoque baixo</h2><div class="lista">${r.estoqueBaixo.length ? r.estoqueBaixo.map(p =>
         `<div class="item"><div class="info nome">${esc(p.nome)}</div><div class="preco baixo">${p.estoque} (mín. ${p.minimo})</div></div>`).join('')
         : '<div class="vazio">Tudo abastecido.</div>'}</div>
-      <h2>Vendas</h2><div class="lista">${r.vendas.length ? r.vendas.map(v => `
-        <div class="item ${v.situacao === 'Cancelada' ? 'cancelada' : ''}"><div class="info">
-        <div class="nome">${esc(v.forma)}${v.cliente ? ' · ' + esc(v.cliente) : ''}</div>
-        <div class="sub">${esc(v.data)}${v.situacao === 'Cancelada' ? ' · cancelada' : ''}</div></div>
+      <h2>Vendas (${r.vendas.length})</h2><div class="lista">${r.vendas.length ? r.vendas.map(v => `
+        <div class="item ${v.situacao === 'Cancelada' ? 'cancelada' : ''}" style="align-items:flex-start"><div class="info">
+        <div class="nome">${esc(v.data)} · ${esc(v.forma)}${v.cliente ? ' · ' + esc(v.cliente) : ''}</div>
+        ${v.itens.map(i => `<div class="sub" style="color:var(--tinta)">${i.qtd}x ${esc(i.nome)} <span style="color:var(--suave)">(${brl(i.subtotal)})</span></div>`).join('')}
+        ${v.situacao === 'Cancelada' ? '<div class="sub">cancelada</div>' : ''}</div>
         <div class="preco">${brl(v.total)}</div>
         ${v.situacao !== 'Cancelada' ? `<button class="btn perigo" style="padding:6px 10px" onclick="cancelar('${esc(v.id)}')">Cancelar</button>` : ''}
         </div>`).join('') : '<div class="vazio">Nenhuma venda no período.</div>'}</div>`;
